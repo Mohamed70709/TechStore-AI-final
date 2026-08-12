@@ -1,6 +1,8 @@
 from database import orders, products, tickets
 from rag import retrieve_documents
 from api.database import support_tickets_collection
+from difflib import SequenceMatcher
+
 
 def check_order_status(order_id):
     """
@@ -22,19 +24,48 @@ def check_order_status(order_id):
         "payment": order["payment"],
         "total": order["total"]
     }
-def search_products(keyword):
+
+def similar_text(a, b):
     """
-    Search products by name or category.
+    Returns True when two words are reasonably similar.
     """
 
-    keyword = keyword.lower()
+    return SequenceMatcher(
+        None,
+        a.lower(),
+        b.lower()
+    ).ratio() >= 0.65
+
+def search_products(keyword, max_price=None):
+    """
+    Search products by name or category.
+
+    If max_price is provided, only return products
+    at or below that price.
+    """
+
+    keyword = keyword.lower().strip()
+
     results = []
 
     for product in products:
-        if (
-            keyword in product["name"].lower()
-            or keyword in product["category"].lower()
-        ):
+
+        name = product["name"].lower()
+        category = product["category"].lower()
+
+        matches_keyword = (
+            keyword in name
+            or keyword in category
+            or similar_text(keyword, name)
+            or similar_text(keyword, category)
+        )
+
+        matches_price = (
+            max_price is None
+            or product["price"] <= max_price
+        )
+
+        if matches_keyword and matches_price:
             results.append(product)
 
     if not results:
@@ -124,7 +155,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 resend.api_key = os.getenv("RESEND_API_KEY")
-
+SUPPORT_TEAM_EMAIL = os.getenv("SUPPORT_TEAM_EMAIL")
 
 def send_support_email(order_id, issue):
 
@@ -139,7 +170,7 @@ def send_support_email(order_id, issue):
 
     params = {
         "from": "onboarding@resend.dev",
-        "to": [customer_email],
+        "to": [SUPPORT_TEAM_EMAIL],
         "subject": "TechStore Support Escalation",
         "html": f"""
         <h2>Support Escalation</h2>
@@ -206,4 +237,63 @@ def create_support_ticket(
         "status": "Open",
         "priority": priority,
         "message": "Support ticket created successfully."
+    }
+def recommend_products(
+    budget: float,
+    category: str | None = None,
+    use_case: str | None = None
+):
+    """
+    Recommend real products from the catalog based on budget,
+    category, and customer use case.
+    """
+
+    # Convert the category to lowercase if provided
+    category = category.lower().strip() if category else None
+
+    # Simple use-case mapping
+    if use_case:
+        use_case_lower = use_case.lower()
+
+        if (
+            "software engineer" in use_case_lower
+            or "programming" in use_case_lower
+            or "coding" in use_case_lower
+            or "developer" in use_case_lower
+        ):
+            category = "laptop"
+
+    candidates = []
+
+    for product in products:
+
+        # Product must be within the customer's budget
+        if product["price"] > budget:
+            continue
+
+        # If a category is specified, match that category
+        if category:
+            if category not in product["category"].lower():
+                continue
+
+        # Don't recommend products that are out of stock
+        if product["stock"] <= 0:
+            continue
+
+        candidates.append(product)
+
+    if not candidates:
+        return {
+            "message": f"No products found within a budget of ${budget}."
+        }
+
+    # Rank products by how close they are to the customer's budget.
+    # This gives priority to the best use of the available budget.
+    candidates.sort(
+        key=lambda product: budget - product["price"]
+    )
+
+    return {
+        "budget": budget,
+        "recommendations": candidates
     }

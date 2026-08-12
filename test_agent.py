@@ -1,18 +1,23 @@
-from agents import Runner
-from agents_file import triage_agent
+from fastapi.testclient import TestClient
 
-print("Testing Agents SDK...")
+from api.main import app
 
-try:
-    result = Runner.run_sync(
-        starting_agent=triage_agent,
-        input="Where is order 1001?"
+
+client = TestClient(app)
+
+
+def test_agent_workflow():
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": "test_agent_workflow",
+            "message": "What is your return policy?"
+        }
     )
 
-    print("SUCCESS!")
-    print("Response:")
-    print(result.final_output)
+    assert response.status_code == 200
 
-except Exception as e:
-    print("ERROR TYPE:", type(e).__name__)
-    print("ERROR:", e)
+    data = response.json()
+
+    assert data["reply"]
+    assert len(data["reply"].strip()) > 0

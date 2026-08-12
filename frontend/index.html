@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TechStore AI</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="chat-container">
+
+    <div class="chat-header">
+
+        <div>
+            <h1>TechStore AI</h1>
+            <p>AI Customer Support Assistant</p>
+        </div>
+
+        <div class="header-actions">
+
+            <span id="user-info">
+                Not signed in
+            </span>
+
+            <button id="auth-button">
+                Sign In
+            </button>
+
+            <button id="new-chat-button">
+                New Chat
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <div id="auth-panel" class="auth-panel hidden">
+
+        <h2 id="auth-title">Sign In</h2>
+
+        <input
+            id="auth-name"
+            type="text"
+            placeholder="Name"
+            class="auth-input hidden"
+        >
+
+        <input
+            id="auth-email"
+            type="email"
+            placeholder="Email"
+            class="auth-input"
+        >
+
+        <input
+            id="auth-password"
+            type="password"
+            placeholder="Password"
+            class="auth-input"
+        >
+
+        <button id="auth-submit">
+            Sign In
+        </button>
+
+        <p id="auth-message"></p>
+
+        <button id="auth-switch" class="auth-switch">
+            Create an account
+        </button>
+
+    </div>
+
+
+    <div class="status-bar">
+        <span class="status-dot"></span>
+        AI Assistant Online
+    </div>
+
+
+    <div id="chat-box" class="chat-box">
+
+        <div class="message assistant">
+            Hello! I'm the TechStore AI assistant.
+            How can I help you today?
+        </div>
+
+    </div>
+
+
+    <div id="typing-indicator" class="typing-indicator hidden">
+        AI is typing...
+    </div>
+
+
+<div class="input-area">
+
+    <input
+        id="image-input"
+        type="file"
+        accept="image/*"
+        hidden
+    >
+
+    <button
+        id="image-button"
+        title="Upload product image"
+    >
+    </button>
+
+    <button id="voice-button" title="Voice input">
+        
+    </button>
+
+    <input
+        id="message-input"
+        type="text"
+        placeholder="Ask about orders, products, returns, refunds..."
+        autocomplete="off"
+    >
+
+    <button id="send-button">
+        Send
+    </button>
+
+</div>
+
+
+    <div class="footer">
+        Powered by TechStore AI
+    </div>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>

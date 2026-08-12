@@ -1,13 +1,17 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from bson import ObjectId
 
 from api.schemas.order import Order
 from api.database import orders_collection
+from api.dependencies import get_current_customer
 
 router = APIRouter(tags=["Orders"])
 
 @router.post("/orders")
-def create_order(order: Order):
+def create_order(
+    order: Order,
+    current_customer=Depends(get_current_customer)
+):
     result = orders_collection.insert_one(order.model_dump())
 
     return {
@@ -16,7 +20,7 @@ def create_order(order: Order):
     }
 
 @router.get("/orders")
-def get_orders():
+def get_orders(current_customer=Depends(get_current_customer)):
     orders = []
 
     for order in orders_collection.find():

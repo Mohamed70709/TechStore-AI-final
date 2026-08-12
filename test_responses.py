@@ -9,7 +9,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 response = client.chat.completions.create(
-    model="gpt-4.1-mini",
+    model="gpt-5.4-mini",
     messages=[
         {"role": "user", "content": "Say hello."}
     ]

@@ -20,6 +20,7 @@ from tools import (
     ticket_inquiry,
     send_support_email,
     create_support_ticket,
+    recommend_products,
 )
 
 # -----------------------
@@ -56,10 +57,53 @@ def order_status(order_id: str):
 
 
 @function_tool
-def product_search(keyword: str):
-    """Search for products by keyword."""
-    return search_products(keyword)
+def product_search(
+    keyword: str,
+    max_price: float | None = None
+):
+    """
+    Search products by keyword and optionally filter
+    by maximum price.
+    """
+    return search_products(
+        keyword,
+        max_price
+    )
 
+@function_tool
+def product_recommendation(
+    budget: float,
+    category: str | None = None,
+    use_case: str | None = None
+):
+    """
+    REQUIRED tool for ALL product recommendation requests.
+
+    Use this tool whenever the customer gives a budget or asks for
+    products within a price limit.
+
+    Examples:
+    - "I have $500 and need a laptop"
+    - "What laptop can I get for $1500?"
+    - "Recommend a phone under $900"
+    - "I have $1000 for a laptop"
+
+    The budget is the customer's MAXIMUM price.
+
+    If no products match the budget, the tool returns a message
+    explaining that no products were found. You must show that
+    result to the customer and never ask them to repeat the budget.
+
+    Arguments:
+    - budget: maximum amount the customer wants to spend
+    - category: product category such as laptop, phone, or accessories
+    - use_case: optional intended use such as programming or gaming
+    """
+    return recommend_products(
+        budget,
+        category,
+        use_case
+    )
 
 @function_tool
 def cancel(order_id: str):
@@ -107,6 +151,43 @@ def create_ticket(
         products_mentioned,
         priority
     )
+@function_tool
+def previous_user_messages(
+    ctx: RunContextWrapper[dict]
+):
+    """
+    Returns the previous user messages from the current conversation,
+    excluding the current message.
+    """
+
+    session_id = ctx.context.get("session_id")
+
+    if not session_id:
+        return {
+            "messages": []
+        }
+
+    from api.database import messages_collection
+
+    messages = list(
+        messages_collection.find(
+            {
+                "session_id": session_id,
+                "role": "user"
+            },
+            {
+                "_id": 0,
+                "content": 1
+            }
+        ).sort("_id", -1).limit(10)
+    )
+
+    return {
+        "messages": [
+            message["content"]
+            for message in messages
+        ]
+    }
 # -----------------------
 # Knowledge Agent
 # -----------------------
@@ -132,20 +213,78 @@ The results can contain both policy titles and the actual policy details.
 You MUST read and use ALL relevant results returned by the tool.
 Do not assume that only the first result is useful.
 
-For example, if the tool returns:
+CONVERSATION MEMORY:
 
-["Return Policy", "Items can be returned within 30 days of delivery."]
+When the customer asks what they previously asked, said, or discussed,
+use the previous_user_messages tool.
 
-you must use the second result to answer the customer's question.
+The tool returns previous USER messages only.
 
-Never say that the policy details are unavailable when the returned results contain the answer.
+Do not count assistant messages.
 
-Do not invent information that is not present in the knowledge base.
+Do not include the current question as a previous question.
 
-If the request is outside your area, hand it off.
-""",
+For:
+"What did I ask before?"
+
+return the most recent message from the tool.
+
+For:
+"What did I ask before before this?"
+
+return the second-most-recent message from the tool.
+
+For:
+"What did I ask three questions ago?"
+
+return the third-most-recent message from the tool.
+
+Always use the tool for questions about previous user messages.
+
+Never say that conversation history is unavailable if the tool returns
+previous messages.
+
+Do NOT repeat the current question as the answer.
+
+For example, if the conversation is:
+
+User: What is your return policy?
+Assistant: Items can be returned within 30 days.
+User: Find laptops
+Assistant: Here are the available laptops.
+User: What did I ask before?
+
+The correct answer is:
+
+"You previously asked: 'Find laptops.'"
+
+If the customer asks:
+
+"What did I ask before before this?"
+
+identify the SECOND-MOST-RECENT previous USER message.
+
+If the customer asks:
+
+"What did I ask three questions ago?"
+
+identify the THIRD-MOST-RECENT previous USER message.
+
+Always count previous USER messages backward from the current message.
+
+Do NOT count assistant messages when determining what the customer
+previously asked.
+
+Do NOT say that you cannot access the conversation history.
+
+Do NOT claim that you only have access to the current message.
+
+If there is no previous user message available, say that there is no
+previous conversation information available.""",
+
     tools=[
-        kb_search
+        kb_search,
+        previous_user_messages
     ]
 )
 
@@ -168,19 +307,46 @@ You help customers with:
 Always use the appropriate tool.
 
 IMPORTANT:
+
 - If the customer asks to find, search for, or show products, ALWAYS use the product_search tool.
 - Do not ask unnecessary clarification questions when the customer provides a valid product category or keyword.
 - For example, if the customer says "Find laptops", immediately call product_search with keyword "laptop".
 - For order status questions, ALWAYS use order_status.
 - For cancellation requests, ALWAYS use cancel.
 - For refund eligibility questions, ALWAYS use refund.
-- Never invent product information or order information.
+PRODUCT RECOMMENDATIONS:
+
+- If the customer gives a budget and asks for a product recommendation,
+  ALWAYS call product_recommendation.
+- If the customer asks for products under a specific price, ALWAYS call
+  product_recommendation.
+- If the customer gives a budget together with a product category,
+  ALWAYS call product_recommendation.
+- Extract the numeric budget from the customer's message.
+- A budget such as "$500", "$1,500", "500 dollars", or "1500 USD"
+  must be treated as a numeric budget.
+- Do NOT ask the customer to resend a budget that is already present
+  in their message.
+- Pass the customer's maximum budget to product_recommendation.
+- If the customer says "laptop", use category="laptop".
+- Only recommend products returned by product_recommendation.
+- If the tool returns products, present them to the customer.
+- If the tool returns a "No products found" message, clearly tell the
+  customer that no matching products are available within that budget.
+- NEVER return an empty response after calling product_recommendation.
+- NEVER ask the customer to repeat a budget that was already provided.
+
+- Do not invent product information or order information.
+- Only recommend products returned by the recommendation tool.
+- Respect the customer's maximum budget.
+- If no matching products are available, clearly tell the customer.
 
 If the request is outside your area, hand it off.
 """,
     tools=[
         order_status,
         product_search,
+        product_recommendation,
         cancel,
         refund
     ]
@@ -197,38 +363,50 @@ support_agent = Agent(
     instructions="""
 You help customers with:
 
-- ticket inquiries
-- support emails
-- damaged orders
-- duplicate charges
-- payment problems
+- checking order status
+- searching products
+- cancelling orders
+- refund eligibility
+- product recommendations
 
 Always use the appropriate tool.
 
-If the customer asks about a support ticket, ALWAYS use the ticket tool.
-Do not guess or invent ticket information.
+IMPORTANT:
 
-If the request is outside your area, hand it off.
-If an issue cannot be resolved automatically, create a support ticket.
+- If the customer asks to find, search for, or show products, ALWAYS use the product_search tool.
+- Do not ask unnecessary clarification questions when the customer provides a valid product category or keyword.
+- For example, if the customer says "Find laptops", immediately call product_search with keyword "laptop".
+- For order status questions, ALWAYS use order_status.
+- For cancellation requests, ALWAYS use cancel.
+- For refund eligibility questions, ALWAYS use refund.
 
-When creating a support ticket, include:
-- the session ID
-- customer name
-- customer email
-- a concise summary of the conversation
-- actions already taken
-- products mentioned
-- an appropriate priority
+PRODUCT RECOMMENDATIONS:
 
-Use High priority for urgent issues such as serious payment problems,
-fraud concerns, or major unresolved order problems.
+- If the customer asks for product recommendations based on a budget, category, or intended use, ALWAYS use the product_recommendation tool.
+- Use the customer's stated budget as the maximum allowed price.
+- Only recommend products returned by the product_recommendation tool.
+- Never invent products, prices, stock, or other product information.
+- If the recommendation tool returns one or more products, clearly present those products to the customer.
+- If the recommendation tool returns an empty recommendations list, ALWAYS provide a normal text response explaining that no matching products were found within the customer's budget.
+- NEVER return an empty response after calling product_recommendation.
+- If no products match the budget, you can suggest that the customer increase the budget or choose another category.
+- Always finish the response with a clear answer to the customer.
 
-Use Medium priority for normal unresolved customer issues.
+For example:
 
-Use Low priority for minor or non-urgent issues.
+Customer:
+"I have a budget of $500 and need a laptop."
 
-After creating the ticket, tell the customer that the issue has been
-escalated and provide the ticket ID.
+If the recommendation tool returns no laptops, respond with something like:
+
+"I couldn't find any laptops within your $500 budget. If you'd like, I can search for another category or you can increase the budget."
+
+Do not claim that products are unavailable unless the recommendation tool returned no matching products.
+
+OTHER RULES:
+
+- Do not invent product information or order information.
+- If the request is outside your area, hand it off.
 """,
     tools=[
         ticket,
