@@ -172,7 +172,6 @@ async def chat_stream(request: ChatRequest):
     agent_input.append({
         "role": "user",
         "content": normalize_budget_request(request.message)
-
     })
 
     # Save user's message
@@ -191,7 +190,6 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
 
-        
         # Run agent in streaming mode
         result = Runner.run_streamed(
             starting_agent=triage_agent,
@@ -200,8 +198,6 @@ async def chat_stream(request: ChatRequest):
                 "session_id": request.session_id
             }
         )
-
-        
 
         full_response = ""
 
@@ -213,13 +209,18 @@ async def chat_stream(request: ChatRequest):
                 flush=True
             )
 
-            # We only want actual assistant text
+            # Only process actual text delta events
             if (
                 event.type == "raw_response_event"
-                and event.data.type == "response.output_text.delta"
+                and getattr(event.data, "type", None)
+                == "response.output_text.delta"
             ):
 
-                delta = event.data.delta
+                delta = getattr(
+                    event.data,
+                    "delta",
+                    ""
+                )
 
                 print(
                     "STREAM DELTA:",
@@ -228,9 +229,46 @@ async def chat_stream(request: ChatRequest):
                 )
 
                 if delta:
+
                     full_response += delta
 
-                    yield f"data: {json.dumps({'delta': delta})}\n\n"
+                    yield (
+                        f"data: "
+                        f"{json.dumps({'delta': delta})}"
+                        f"\n\n"
+                    )
+
+        # Fallback:
+        # If streaming did not provide text,
+        # use the final agent output.
+        if not full_response:
+
+            try:
+                final_output = result.final_output
+
+                print(
+                    "STREAM FALLBACK:",
+                    repr(final_output),
+                    flush=True
+                )
+
+                if final_output:
+
+                    full_response = final_output
+
+                    yield (
+                        f"data: "
+                        f"{json.dumps({'delta': final_output})}"
+                        f"\n\n"
+                    )
+
+            except Exception as error:
+
+                print(
+                    "FINAL OUTPUT ERROR:",
+                    repr(error),
+                    flush=True
+                )
 
         print(
             "STREAM: finished, response =",
@@ -238,15 +276,19 @@ async def chat_stream(request: ChatRequest):
             flush=True
         )
 
-        # Save assistant response after streaming finishes
+        # Save assistant response
         messages_collection.insert_one({
             "session_id": request.session_id,
             "role": "assistant",
             "content": full_response
         })
 
-        # Tell client streaming is complete
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        # Tell frontend streaming is complete
+        yield (
+            f"data: "
+            f"{json.dumps({'done': True})}"
+            f"\n\n"
+        )
 
     return StreamingResponse(
         generate(),

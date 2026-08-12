@@ -21,6 +21,26 @@ const authSwitch = document.getElementById("auth-switch");
 const authMessage = document.getElementById("auth-message");
 const userInfo = document.getElementById("user-info");
 
+const accountButton =
+    document.getElementById("account-button");
+const accountPanel =
+    document.getElementById("account-panel");
+
+const closeAccountButton =
+    document.getElementById("close-account-button");
+
+const accountName =
+    document.getElementById("account-name");
+
+const accountEmail =
+    document.getElementById("account-email");
+
+const accountBalance =
+    document.getElementById("account-balance");
+
+const accountReports =
+    document.getElementById("account-reports");
+
 // Session used for this browser demonstration
 let sessionId =
     localStorage.getItem("memory_session_id") ||
@@ -249,6 +269,11 @@ function updateAuthUI() {
         authButton.textContent =
             "Sign Out";
 
+        // Show My Account button
+        if (accountButton) {
+            accountButton.classList.remove("hidden");
+        }
+
     } else {
 
         userInfo.textContent =
@@ -256,6 +281,11 @@ function updateAuthUI() {
 
         authButton.textContent =
             "Sign In";
+
+        // Hide My Account button
+        if (accountButton) {
+            accountButton.classList.add("hidden");
+        }
     }
 }
 
@@ -728,4 +758,133 @@ function formatCatalogResult(result) {
         );
 
     }).join("\n\n");
+}
+// ==============================
+// Account
+// ==============================
+
+async function openAccountPanel() {
+
+    const token =
+        localStorage.getItem("access_token");
+
+    if (!token) {
+        openAuthPanel();
+        return;
+    }
+
+    accountPanel.classList.remove("hidden");
+
+    accountName.textContent =
+        localStorage.getItem("user_name") ||
+        "Customer";
+
+    accountEmail.textContent =
+        localStorage.getItem("user_email") ||
+        "Not available";
+
+    accountBalance.textContent =
+        "Loading...";
+
+    accountReports.textContent =
+        "Loading...";
+
+    try {
+
+        const response = await fetch(
+            "/auth/me",
+            {
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Could not load account information."
+            );
+        }
+
+        const data =
+            await response.json();
+
+        accountName.textContent =
+            data.name || "Customer";
+
+        accountEmail.textContent =
+            data.email || "Not available";
+
+        accountBalance.textContent =
+            `$${Number(data.balance || 0).toFixed(2)}`;
+
+        accountReports.innerHTML = "";
+
+        if (
+            data.reports &&
+            data.reports.length > 0
+        ) {
+
+            data.reports.forEach(
+                function(report) {
+
+                    const item =
+                        document.createElement("div");
+
+                    item.className =
+                        "account-report";
+
+                    item.textContent =
+                        report;
+
+                    accountReports.appendChild(
+                        item
+                    );
+                }
+            );
+
+        } else {
+
+            accountReports.textContent =
+                "No reports available.";
+        }
+
+    } catch (error) {
+
+        console.error(
+            "ACCOUNT ERROR:",
+            error
+        );
+
+        accountBalance.textContent =
+            "Unavailable";
+
+        accountReports.textContent =
+            "Could not load reports.";
+    }
+}
+
+
+function closeAccountPanel() {
+
+    accountPanel.classList.add("hidden");
+}
+
+
+if (accountButton) {
+
+    accountButton.addEventListener(
+        "click",
+        openAccountPanel
+    );
+}
+
+
+if (closeAccountButton) {
+
+    closeAccountButton.addEventListener(
+        "click",
+        closeAccountPanel
+    );
 }

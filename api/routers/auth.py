@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends
+from api.dependencies import get_current_customer
 
 from api.auth import (
     create_access_token,
@@ -87,4 +89,17 @@ def login(request: LoginRequest):
         "token_type": "bearer",
         "name": customer["name"],
         "email": customer["email"]
+    }
+@router.get("/me")
+def get_my_account(
+    customer: dict = Depends(get_current_customer)
+):
+    return {
+        "name": customer["name"],
+        "email": customer["email"],
+        "balance": 1000.00,
+        "reports": [
+            "Account is active",
+            "Customer account verified"
+        ]
     }
